@@ -1070,7 +1070,7 @@ tr.r.taken-row:hover { opacity: 0.65; }
 
 var firebaseConfig = {
   apiKey: "AIzaSyA9obvEGVdRktxX6EgXZ8FPamF9NPz4JRE",
-  authDomain: "miwaydrift.github.io",
+  authDomain: "miwaydrift.firebaseapp.com",
   projectId: "miwaydrift",
   storageBucket: "miwaydrift.firebasestorage.app",
   messagingSenderId: "740977441308",
@@ -1980,7 +1980,6 @@ function showHastusResult(type,msg){
   el.textContent=msg;
 }
 
-
 function parseHastusData(raw){
   var data;
   try{ data=JSON.parse(raw); } catch(e){ return null; }
@@ -1989,20 +1988,23 @@ function parseHastusData(raw){
   var relief=[];
 
   if(Array.isArray(data)){
-    // Reject if it looks like the main raw schedule data (array of arrays)
+    // Reject main schedule data (array-of-arrays)
     if(data.length>0 && Array.isArray(data[0])) return null;
+
     for(var i=0;i<data.length;i++){
       var item=data[i];
+
       if(typeof item==='string'||typeof item==='number'){
         ids.push(String(item).trim());
-      } else if(typeof item==='object'&&item!==null){
-        var roster=(item.roster||'').toUpperCase();
-        var dutyType=(item.duty_type||item.type||item.position_type||'').toUpperCase();
-        // Separate sick/vac relief by roster OR duty_type
-        var isSickRel=roster==='SICKRL'||dutyType==='SICK RELIEF'||dutyType==='SICKRL'||dutyType==='SICK_RELIEF';
-        var isVacRel=roster==='VACREL'||dutyType==='VAC RELIEF'||dutyType==='VACREL'||dutyType==='VAC_RELIEF'||dutyType==='VACATION RELIEF';
-        if(isSickRel||isVacRel){
-          var rtype=isSickRel?'sick':'vac';
+        continue;
+      }
+
+      if(typeof item==='object'&&item!==null){
+        var roster=(item.roster||'').toUpperCase().trim();
+
+        // Sick/Vac relief — identified purely by roster field
+        if(roster==='SICKRL'||roster==='VACREL'){
+          var rtype=roster==='SICKRL'?'sick':'vac';
           var daysInfo=item.days||{};
           var workDays=[], offDays=[];
           var dayOrder=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -2013,7 +2015,7 @@ function parseHastusData(raw){
             else workDays.push(dayKey);
           }
           relief.push({
-            position: item.position||'',
+            position: String(item.position||''),
             type: rtype,
             roster: item.roster||'',
             working: item.working||'',
@@ -2024,22 +2026,23 @@ function parseHastusData(raw){
             offDays: offDays,
             duty_type: item.duty_type||''
           });
-          continue;
+          continue; // Do NOT add to ids
         }
-        // Regular positions — skip if no recognisable ID field
-        if(item.eligible && item.eligible!=='Eligible') continue;
-        var val=item.position_id||item.position||item.crew_id||item.id||item.crew_number;
-        // Don't use item.crew as fallback — main-data rows have crew field but are not HASTUS availability
-        if(val) ids.push(String(val).trim());
+
+        // Regular available shift — must be Eligible
+        if(item.eligible==='Eligible'){
+          var val=item.position_id||item.position||item.crew_id||item.id;
+          if(val) ids.push(String(val).trim());
+        }
       }
     }
   } else if(typeof data==='object'&&data!==null){
     var arr=data.available||data.positions||data.shifts||data.crews||data.data;
     if(Array.isArray(arr)) return parseHastusData(JSON.stringify(arr));
   }
+
   return (ids.length>0||relief.length>0)?{ids:ids, relief:relief}:null;
 }
-
 
 function applyHastus(){
   var raw=document.getElementById('hm-paste').value.trim();
