@@ -114,6 +114,24 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .legend{ display:flex; gap:14px; flex-wrap:wrap; font-size:11px; color:var(--text3); margin: 4px 2px 10px; align-items:center; }
 .legend .item{ display:flex; align-items:center; gap:5px; }
 .legend .dot{ width:8px;height:8px;border-radius:50%; }
+
+/* Desktop print-style run sheet: trip details flow down three readable columns, then continue left-to-right exactly like the MiWay PDF. The duty summary above is unchanged. */
+@media (min-width: 1000px) {
+  #wrap { max-width: 1400px; padding:16px 28px 34px; }
+  #tl-root { column-count:3; column-gap:22px; column-rule:1px solid var(--border); }
+  .timeline-card, .tl-body { display:contents; }
+  .tl-header { display:flex; break-after:avoid; break-inside:avoid; margin:11px 0 0; padding:6px 9px; border-radius:7px 7px 0 0; font-size:11px; }
+  .tl-body > * { break-inside:avoid; }
+  .stop { gap:7px; padding:2px 7px; min-height:21px; border-bottom:1px dotted #d8d3cc; }
+  .stop .dot { width:7px; height:7px; }
+  .stop .place { font-size:12.5px; line-height:1.18; }
+  .stop .time { font-size:12px; }
+  .tl-divider { margin:5px 7px 3px; }
+  .tl-divider .code { font-size:9px; }
+  .tl-split, .tl-relief { margin:6px 7px; padding:6px 8px; font-size:11px; }
+  .legend { margin-bottom:6px; }
+  .timeline-card + .timeline-card .tl-header { margin-top:12px; }
+}
 </style>
 </head>
 <body>
