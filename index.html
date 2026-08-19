@@ -1919,7 +1919,8 @@ function continueAsGuest() {
   render(); updFavCnt();
   playWelcome();
 }
-var ADMIN_UID = 'vDpYW3ZwOGfAh9735izaDVuPv892';
+
+var ADMIN_UID = '3C9qAklodWTy4uH8CsojoDFqyTF3'; 
 
 function toggleUserMenu(e){
   e.stopPropagation();
@@ -1941,7 +1942,7 @@ function closeUserMenu(){
 }
 
 function resetAllUsersData(){
-  if (!CURRENT_USER || CURRENT_USER.uid !== vDpYW3ZwOGfAh9735izaDVuPv892) {
+  if (!CURRENT_USER || CURRENT_USER.uid !== ADMIN_UID) {
     alert('Not authorized.');
     return;
   }
@@ -2065,7 +2066,7 @@ function _startAuthWatcher() {
       document.getElementById('user-name-short').textContent = name;
       var cr = document.getElementById('hastus-cloud-row');
       if (cr) cr.style.display = 'flex';
-      var isAdmin = (user.uid === vDpYW3ZwOGfAh9735izaDVuPv892);
+      var isAdmin = (user.uid === ADMIN_UID);
       document.getElementById('admin-reset-all-item').style.display = isAdmin ? 'block' : 'none';
       document.getElementById('admin-reset-all-divider').style.display = isAdmin ? 'block' : 'none';
       loadUserData(user.uid);
