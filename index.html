@@ -2002,14 +2002,21 @@ function linkPinToAccount() {
   FB.linkWithCredential(fbAuth.currentUser, credential).then(function(){
     alert('✅ PIN login linked! You can now sign in on any device with:\n\nEmail: ' + email + '\nPIN: (what you just set)\n\nvia the "Sign in with PIN instead" link on the sign-in screen.');
   }).catch(function(err){
-    if (err.code === 'auth/email-already-in-use') {
-      alert('That email is already linked to a different account. Try another email.');
+    console.error('linkPinToAccount error:', err.code, err.message, err);
+    if (err.code === 'auth/email-already-in-use' || err.code === 'auth/credential-already-in-use') {
+      alert('That email is already linked to a different account. Try another email.\n\n(' + err.code + ')');
     } else if (err.code === 'auth/provider-already-linked') {
-      alert('This account already has a PIN login linked. Sign out and use "Sign in with PIN" to test it, or contact yourself to reset it via Firebase Console.');
+      alert('This account already has a PIN login linked. Sign out and use "Sign in with PIN" to test it, or remove the existing Email/Password provider for your user in Firebase Console (Authentication → Users → your row) and try again.');
     } else if (err.code === 'auth/requires-recent-login') {
       alert('For security, please sign out and sign back in with Google, then try linking again right away.');
+    } else if (err.code === 'auth/weak-password' || err.code === 'auth/password-does-not-meet-requirements') {
+      alert('Firebase rejected the PIN as too weak. If you have a custom Password Policy enabled (Authentication → Settings → Password policy), it may require more than just digits — try a longer PIN or disable the extra requirements there.\n\n(' + err.code + ')');
+    } else if (err.code === 'auth/invalid-email') {
+      alert('That email address looks invalid — check for typos.');
+    } else if (err.code === 'auth/operation-not-allowed') {
+      alert('Email/Password sign-in is not enabled for this project yet. Go to Firebase Console → Authentication → Sign-in method → enable Email/Password.');
     } else {
-      alert('Could not link PIN: ' + err.message);
+      alert('Could not link PIN.\n\nError code: ' + (err.code || 'unknown') + '\nDetails: ' + err.message + '\n\n(Full details also logged to the browser console — press F12 to view.)');
     }
   });
 }
