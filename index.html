@@ -1333,8 +1333,8 @@ tr.r.taken-row:hover { opacity: 0.65; }
 
     <div id="pin-toggle" style="margin-top:14px;font-size:12px;color:var(--text2);cursor:pointer;text-align:center" onclick="togglePinForm()">Sign in with PIN instead</div>
     <div id="pin-form" style="display:none;margin-top:10px">
-      <input type="email" id="pin-email" placeholder="Email" autocomplete="username" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px">
-      <input type="password" id="pin-code" placeholder="6-digit PIN" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;letter-spacing:3px">
+      <input type="text" id="pin-email" placeholder="Username (e.g. admin)" autocomplete="username" autocapitalize="off" autocorrect="off" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px">
+      <input type="password" id="pin-code" placeholder="PIN" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" style="width:100%;box-sizing:border-box;margin-bottom:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:14px;letter-spacing:3px">
       <button class="google-btn" style="justify-content:center" onclick="signInWithPin()">Sign In</button>
     </div>
   </div>
@@ -1854,28 +1854,38 @@ function togglePinForm(){
   if (!showing) document.getElementById('pin-email').focus();
 }
 
+// A fixed, made-up domain used only to satisfy Firebase's email-shaped
+// username requirement — it never sends or receives real mail. Usernames
+// typed on screen (e.g. "admin") are translated to "admin@<this>" before
+// being sent to Firebase, entirely behind the scenes.
+var PIN_LOGIN_DOMAIN = 'centralparkway-pin.local';
+function toPinEmail(username){
+  var u = username.trim().toLowerCase().replace(/\s+/g,'');
+  return u.indexOf('@') > -1 ? u : (u + '@' + PIN_LOGIN_DOMAIN);
+}
+
 function signInWithPin() {
   if (!FIREBASE_READY) { alert('Firebase not configured yet.'); return; }
-  var email = document.getElementById('pin-email').value.trim();
+  var username = document.getElementById('pin-email').value.trim();
   var pin   = document.getElementById('pin-code').value.trim();
   var loadEl = document.getElementById('auth-loading');
   var errEl  = document.getElementById('auth-error');
-  if (!email || !pin) {
+  if (!username || !pin) {
     errEl.style.display = 'block';
-    errEl.textContent = 'Enter both email and PIN.';
+    errEl.textContent = 'Enter both username and PIN.';
     return;
   }
   loadEl.style.display = 'block';
   errEl.style.display  = 'none';
   var FB = window._FB;
-  FB.signInWithEmailAndPassword(fbAuth, email, pin).then(function(){
+  FB.signInWithEmailAndPassword(fbAuth, toPinEmail(username), pin).then(function(){
     loadEl.style.display = 'none';
     document.getElementById('pin-code').value = '';
   }).catch(function(err){
     loadEl.style.display = 'none';
     errEl.style.display = 'block';
     errEl.textContent = (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found')
-      ? 'Incorrect email or PIN.' : err.message;
+      ? 'Incorrect username or PIN.' : err.message;
   });
 }
 
@@ -1909,14 +1919,7 @@ function continueAsGuest() {
   render(); updFavCnt();
   playWelcome();
 }
-
-// ───── ADMIN: bulk reset for a new sign-up period ─────
-// Replace this with your own Firebase UID (Firebase Console → Authentication
-// → Users → copy the "User UID" column for your account). This is NOT a
-// secret — it's just used client-side to decide whether to show the button.
-// The actual security boundary is the Firestore rule below, which only lets
-// this UID write to other users' documents.
-var ADMIN_UID = 'PASTE_YOUR_FIREBASE_UID_HERE';
+var ADMIN_UID = 'vDpYW3ZwOGfAh9735izaDVuPv892';
 
 function toggleUserMenu(e){
   e.stopPropagation();
@@ -1938,7 +1941,7 @@ function closeUserMenu(){
 }
 
 function resetAllUsersData(){
-  if (!CURRENT_USER || CURRENT_USER.uid !== ADMIN_UID) {
+  if (!CURRENT_USER || CURRENT_USER.uid !== vDpYW3ZwOGfAh9735izaDVuPv892) {
     alert('Not authorized.');
     return;
   }
@@ -1989,8 +1992,15 @@ function linkPinToAccount() {
     alert('Sign in with Google first, then link a PIN to that same account.');
     return;
   }
-  var email = prompt('Email to use for PIN sign-in (can be any email you\'ll remember — doesn\'t need to match your Google email):');
+  var currentEmail = (fbAuth.currentUser && fbAuth.currentUser.email) || '';
+  var email = prompt(
+    'Email for PIN sign-in — this must match your Google account\'s email exactly (Firebase requires this to link a PIN to the same account):',
+    currentEmail
+  );
   if (!email) return;
+  if (currentEmail && email.trim().toLowerCase() !== currentEmail.toLowerCase()) {
+    if (!confirm('That email doesn\'t match your Google account (' + currentEmail + '). Linking will likely fail. Continue anyway?')) return;
+  }
   var pin = prompt('Choose a PIN (6+ digits):');
   if (!pin) return;
   if (pin.length < 6) { alert('PIN must be at least 6 characters (Firebase requirement).'); return; }
@@ -2013,6 +2023,8 @@ function linkPinToAccount() {
       alert('Firebase rejected the PIN as too weak. If you have a custom Password Policy enabled (Authentication → Settings → Password policy), it may require more than just digits — try a longer PIN or disable the extra requirements there.\n\n(' + err.code + ')');
     } else if (err.code === 'auth/invalid-email') {
       alert('That email address looks invalid — check for typos.');
+    } else if (err.code === 'auth/operation-not-allowed' && /verify the new email/i.test(err.message)) {
+      alert('Firebase requires the linked email to match your Google account\'s email exactly. Try again and enter: ' + currentEmail);
     } else if (err.code === 'auth/operation-not-allowed') {
       alert('Email/Password sign-in is not enabled for this project yet. Go to Firebase Console → Authentication → Sign-in method → enable Email/Password.');
     } else {
@@ -2053,7 +2065,7 @@ function _startAuthWatcher() {
       document.getElementById('user-name-short').textContent = name;
       var cr = document.getElementById('hastus-cloud-row');
       if (cr) cr.style.display = 'flex';
-      var isAdmin = (user.uid === ADMIN_UID);
+      var isAdmin = (user.uid === vDpYW3ZwOGfAh9735izaDVuPv892);
       document.getElementById('admin-reset-all-item').style.display = isAdmin ? 'block' : 'none';
       document.getElementById('admin-reset-all-divider').style.display = isAdmin ? 'block' : 'none';
       loadUserData(user.uid);
