@@ -1346,6 +1346,11 @@ tr.r.taken-row:hover { opacity: 0.65; }
   </button>
 </div>
 
+<div id="admin-banner" style="display:none;background:#2563eb;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;position:relative">
+  <span id="admin-banner-text"></span>
+  <span onclick="dismissBanner()" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);cursor:pointer;font-weight:400;opacity:0.8">&#x2715;</span>
+</div>
+
 <div id="hdr">
   <div class="left">
     <h1 id="hdr-garage-name">Central Parkway</h1>
@@ -1364,6 +1369,9 @@ tr.r.taken-row:hover { opacity: 0.65; }
       <div id="user-menu" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.25);min-width:220px;overflow:hidden;z-index:200">
         <div onclick="event.stopPropagation();closeUserMenu();linkPinToAccount()" style="padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text)">&#x1F517; Link PIN Login</div>
         <div style="border-top:1px solid var(--border)"></div>
+        <div id="admin-push-hastus-item" style="display:none;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text)" onclick="event.stopPropagation();closeUserMenu();pushHastusToAll()">&#x1F4E4; Push HASTUS to All Users</div>
+        <div id="admin-set-banner-item" style="display:none;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text)" onclick="event.stopPropagation();closeUserMenu();setBannerMessage()">&#x1F4E2; Set Banner Message</div>
+        <div id="admin-edit-config-item" style="display:none;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text)" onclick="event.stopPropagation();closeUserMenu();editSignupInfo()">&#x2699;&#xFE0F; Edit Signup Info</div>
         <div id="admin-reset-all-item" style="display:none;padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:#dc2626" onclick="event.stopPropagation();closeUserMenu();resetAllUsersData()">&#x1F9E8; Reset ALL Users' Data</div>
         <div id="admin-reset-all-divider" style="display:none;border-top:1px solid var(--border)"></div>
         <div onclick="event.stopPropagation();closeUserMenu();signOut()" style="padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;color:var(--text)">&#x1F6AA; Sign Out</div>
@@ -1756,7 +1764,8 @@ function doSaveHastus(hastusData) {
   var uid = CURRENT_USER.uid;
   _setDoc(_doc(fbDb, 'users', uid), {
     hastus: hastusData,
-    hastusUpdatedAt: _serverTimestamp()
+    hastusUpdatedAt: _serverTimestamp(),
+    hastusSource: 'personal'
   }, { merge: true }).then(function() {
     var cr = document.getElementById('hastus-cloud-row');
     if (cr) { cr.className = 'hastus-cloud-row saved'; cr.querySelector('#hastus-cloud-msg').textContent = '✅ HASTUS data saved to your account'; }
@@ -1788,7 +1797,12 @@ function loadUserData(uid) {
         if (d.hastusUpdatedAt && d.hastusUpdatedAt.toDate) {
           HASTUS_UPDATED_AT = d.hastusUpdatedAt.toDate().getTime();
           HASTUS_CLEARED_AT = null;
-          try{ localStorage.setItem('cp_hastus_updated_at', String(HASTUS_UPDATED_AT)); localStorage.removeItem('cp_hastus_cleared_at'); }catch(e){}
+          HASTUS_SOURCE = d.hastusSource || 'personal';
+          try{
+            localStorage.setItem('cp_hastus_updated_at', String(HASTUS_UPDATED_AT));
+            localStorage.setItem('cp_hastus_source', HASTUS_SOURCE);
+            localStorage.removeItem('cp_hastus_cleared_at');
+          }catch(e){}
         }
       } else if (d.hastusClearedAt && d.hastusClearedAt.toDate) {
         HASTUS_UPDATED_AT = null;
@@ -1920,7 +1934,13 @@ function continueAsGuest() {
   playWelcome();
 }
 
-var ADMIN_UID = '3C9qAklodWTy4uH8CsojoDFqyTF3'; 
+// ───── ADMIN: bulk reset for a new sign-up period ─────
+// Replace this with your own Firebase UID (Firebase Console → Authentication
+// → Users → copy the "User UID" column for your account). This is NOT a
+// secret — it's just used client-side to decide whether to show the button.
+// The actual security boundary is the Firestore rule below, which only lets
+// this UID write to other users' documents.
+var ADMIN_UID = '3C9qAklodWTy4uH8CsojoDFqyTF3'; // ← replace with the UID from Firebase Console → Authentication → Users
 
 function toggleUserMenu(e){
   e.stopPropagation();
@@ -2034,6 +2054,132 @@ function linkPinToAccount() {
   });
 }
 
+// ───── ADMIN: broadcast banner ─────
+function watchBanner(){
+  if (!FIREBASE_READY) { setTimeout(watchBanner, 500); return; }
+  _onSnapshot(_doc(fbDb, 'meta', 'banner'), function(doc){
+    var el = document.getElementById('admin-banner');
+    var txt = document.getElementById('admin-banner-text');
+    if (!doc.exists() || !doc.data().active || !doc.data().message) {
+      el.style.display = 'none';
+      return;
+    }
+    var msg = doc.data().message;
+    var dismissedMsg = null;
+    try { dismissedMsg = localStorage.getItem('cp_banner_dismissed'); } catch(e){}
+    if (dismissedMsg === msg) { el.style.display = 'none'; return; }
+    txt.textContent = msg;
+    el.style.display = 'block';
+  }, function(e){ console.warn('banner watch err', e); });
+}
+function dismissBanner(){
+  var txt = document.getElementById('admin-banner-text').textContent;
+  try { localStorage.setItem('cp_banner_dismissed', txt); } catch(e){}
+  document.getElementById('admin-banner').style.display = 'none';
+}
+function setBannerMessage(){
+  if (!CURRENT_USER || CURRENT_USER.uid !== ADMIN_UID) { alert('Not authorized.'); return; }
+  var current = '';
+  try {
+    var el = document.getElementById('admin-banner-text');
+    if (el && document.getElementById('admin-banner').style.display !== 'none') current = el.textContent;
+  } catch(e){}
+  var msg = prompt('Banner message to show all users (leave blank to clear the banner):', current);
+  if (msg === null) return; // cancelled
+  msg = msg.trim();
+  _setDoc(_doc(fbDb, 'meta', 'banner'), {
+    message: msg,
+    active: !!msg,
+    updatedAt: _serverTimestamp()
+  }, { merge: true }).then(function(){
+    alert(msg ? 'Banner set — everyone will see it next time the app is open.' : 'Banner cleared.');
+  }).catch(function(e){
+    alert('Could not set banner: ' + e.message);
+  });
+}
+
+// ───── ADMIN: signup info (garage name / date / crew count) ─────
+function watchGlobalConfig(){
+  if (!FIREBASE_READY) { setTimeout(watchGlobalConfig, 500); return; }
+  _onSnapshot(_doc(fbDb, 'meta', 'config'), function(doc){
+    if (!doc.exists()) return;
+    var d = doc.data();
+    if (d.garageName) {
+      document.getElementById('hdr-garage-name').textContent = d.garageName;
+      document.getElementById('auth-garage-name').textContent = d.garageName;
+    }
+    if (d.signupDate) document.getElementById('hdr-signup-date').textContent = 'Sign-Up · ' + d.signupDate;
+    if (d.crewCount)  document.getElementById('hdr-crew-count').textContent = d.crewCount + ' Crews';
+  }, function(e){ console.warn('config watch err', e); });
+}
+function editSignupInfo(){
+  if (!CURRENT_USER || CURRENT_USER.uid !== ADMIN_UID) { alert('Not authorized.'); return; }
+  var garageName = prompt('Garage name:', document.getElementById('hdr-garage-name').textContent);
+  if (garageName === null) return;
+  var signupDate = prompt('Sign-up date (shown as-is, e.g. "September 7, 2026"):', document.getElementById('hdr-signup-date').textContent.replace(/^Sign-Up\s*·\s*/,''));
+  if (signupDate === null) return;
+  var suggestedCount = DATA.length || '';
+  var crewCount = prompt('Crew count (leave as suggested to match loaded data):', suggestedCount);
+  if (crewCount === null) return;
+  _setDoc(_doc(fbDb, 'meta', 'config'), {
+    garageName: garageName.trim(),
+    signupDate: signupDate.trim(),
+    crewCount: crewCount.trim(),
+    updatedAt: _serverTimestamp()
+  }, { merge: true }).then(function(){
+    alert('Signup info updated for everyone.');
+  }).catch(function(e){
+    alert('Could not update: ' + e.message);
+  });
+}
+
+// ───── ADMIN: push HASTUS to every user ─────
+function pushHastusToAll(){
+  if (!CURRENT_USER || CURRENT_USER.uid !== ADMIN_UID) { alert('Not authorized.'); return; }
+  if (!HASTUS_RAW) {
+    alert('Import a HASTUS file into your own account first (Import HASTUS button), then use this to push that same data to everyone.');
+    return;
+  }
+  var typed = prompt('This overwrites EVERY user\'s HASTUS availability data with what you currently have loaded, right now. If anyone imports their own HASTUS data afterward, their import will override this push for them — it\'s always whichever happened most recently.\n\nType PUSH to confirm:');
+  if (typed !== 'PUSH') { alert('Cancelled.'); return; }
+
+  var hastusPayload = { ids: HASTUS_RAW, relief: HASTUS_RELIEF };
+  _getDocs(_collection(fbDb, 'users')).then(function(snap){
+    var docs = [];
+    snap.forEach(function(d){ docs.push(d.id); });
+    if (docs.length === 0) { alert('No user documents found.'); return; }
+
+    var chunks = [];
+    for (var i=0; i<docs.length; i+=450) chunks.push(docs.slice(i, i+450));
+
+    var chain = Promise.resolve();
+    chunks.forEach(function(chunk){
+      chain = chain.then(function(){
+        var batch = _writeBatch(fbDb);
+        chunk.forEach(function(uid){
+          batch.set(_doc(fbDb, 'users', uid), {
+            hastus: hastusPayload,
+            hastusUpdatedAt: _serverTimestamp(),
+            hastusSource: 'admin',
+            hastusClearedAt: null
+          }, { merge: true });
+        });
+        return batch.commit();
+      });
+    });
+
+    chain.then(function(){
+      alert('Pushed HASTUS data to ' + docs.length + ' user account(s).');
+    }).catch(function(e){
+      console.error('push hastus err', e);
+      alert('Push failed: ' + e.message);
+    });
+  }).catch(function(e){
+    console.error('push hastus list err', e);
+    alert('Could not list users: ' + e.message);
+  });
+}
+
 function signOut() {
   if (CURRENT_USER === 'guest') {
     if (confirm('Leave guest mode? Your local favourites will be kept on this device.')) {
@@ -2069,6 +2215,9 @@ function _startAuthWatcher() {
       var isAdmin = (user.uid === ADMIN_UID);
       document.getElementById('admin-reset-all-item').style.display = isAdmin ? 'block' : 'none';
       document.getElementById('admin-reset-all-divider').style.display = isAdmin ? 'block' : 'none';
+      document.getElementById('admin-push-hastus-item').style.display = isAdmin ? 'block' : 'none';
+      document.getElementById('admin-set-banner-item').style.display = isAdmin ? 'block' : 'none';
+      document.getElementById('admin-edit-config-item').style.display = isAdmin ? 'block' : 'none';
       loadUserData(user.uid);
       if (window._freshSignIn) { window._freshSignIn = false; playWelcome(); }
     } else {
@@ -3112,6 +3261,7 @@ var RELIEF_SHOW_SICK = true;
 var RELIEF_SHOW_VAC = true;
 var HASTUS_UPDATED_AT = null; // ms epoch of last successful import
 var HASTUS_CLEARED_AT = null; // ms epoch of last clear
+var HASTUS_SOURCE = null; // 'personal' or 'admin'
 
 function fmtRelTime(ms){
   if(!ms) return '';
@@ -3130,9 +3280,10 @@ function fmtRelTime(ms){
 function renderHastusTimestamps(){
   var bar=document.getElementById('hastus-ts');
   if(!bar) return;
+  var srcLabel = HASTUS_SOURCE==='admin' ? '🏢 Admin push · ' : '';
   if(HASTUS_UPDATED_AT){
     var t=fmtRelTime(HASTUS_UPDATED_AT);
-    bar.innerHTML='&#x1F551; Updated '+t.full;
+    bar.innerHTML='&#x1F551; '+srcLabel+'Updated '+t.full;
     bar.title=t.rel;
     bar.style.display='inline';
   } else if(HASTUS_CLEARED_AT){
@@ -3147,7 +3298,8 @@ function renderHastusTimestamps(){
   if(modalTs){
     if(HASTUS_UPDATED_AT){
       var mt=fmtRelTime(HASTUS_UPDATED_AT);
-      modalTs.textContent='Currently loaded: imported '+mt.full+' ('+mt.rel+')';
+      var src = HASTUS_SOURCE==='admin' ? 'pushed by admin' : 'imported by you';
+      modalTs.textContent='Currently loaded: '+src+' '+mt.full+' ('+mt.rel+')';
       modalTs.style.display='block';
     } else if(HASTUS_CLEARED_AT){
       var mt2=fmtRelTime(HASTUS_CLEARED_AT);
@@ -3291,8 +3443,10 @@ function applyHastus(){
   // multi-day, multi-group sign-up.
   HASTUS_UPDATED_AT = Date.now();
   HASTUS_CLEARED_AT = null;
+  HASTUS_SOURCE = 'personal';
   try{
     localStorage.setItem('cp_hastus_updated_at', String(HASTUS_UPDATED_AT));
+    localStorage.setItem('cp_hastus_source', 'personal');
     localStorage.removeItem('cp_hastus_cleared_at');
   }catch(e){}
   renderHastusTimestamps();
@@ -3310,9 +3464,11 @@ function clearHastus(){
   HASTUS_RAW=null;
   HASTUS_RELIEF=[];
   HASTUS_UPDATED_AT=null;
+  HASTUS_SOURCE=null;
   HASTUS_CLEARED_AT=Date.now();
   try{
     localStorage.removeItem('cp_hastus_updated_at');
+    localStorage.removeItem('cp_hastus_source');
     localStorage.setItem('cp_hastus_cleared_at', String(HASTUS_CLEARED_AT));
   }catch(e){}
   renderHastusTimestamps();
@@ -3501,10 +3657,13 @@ window.onload=function(){
   try{
     var u=localStorage.getItem('cp_hastus_updated_at');
     var c=localStorage.getItem('cp_hastus_cleared_at');
-    if(u){ HASTUS_UPDATED_AT=+u; }
+    var s=localStorage.getItem('cp_hastus_source');
+    if(u){ HASTUS_UPDATED_AT=+u; HASTUS_SOURCE=s||'personal'; }
     else if(c){ HASTUS_CLEARED_AT=+c; }
   }catch(e){}
   renderHastusTimestamps();
+  watchBanner();
+  watchGlobalConfig();
   load(); hideSkeleton(); watchLikes();
 };
 
